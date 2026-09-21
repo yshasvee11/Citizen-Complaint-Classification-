@@ -5,3 +5,8 @@ env/
 __pycache__/
 *.pyc
 .env
+
+# Third-party cloned repos & models
+IndicLID/
+
+
