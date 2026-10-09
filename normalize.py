@@ -38,7 +38,7 @@ import contractions  # pip install contractions
 #   python -m spacy download en_core_web_sm
 print("[normalize.py] Loading spaCy model (en_core_web_sm)...")
 nlp = spacy.load("en_core_web_sm", disable=["ner", "parser", "tagger"])
-print("[normalize.py] ✅ spaCy model loaded.")
+print("[normalize.py] [OK] spaCy model loaded.")
 
 # ─── Helper functions ─────────────────────────────────────────────────────────
 

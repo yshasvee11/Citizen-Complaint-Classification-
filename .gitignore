@@ -8,5 +8,10 @@ __pycache__/
 
 # Third-party cloned repos & models
 IndicLID/
+node_modules/
+
+# Civic Complaint Portals (InfraLynx full frontend - not part of NLP pipeline)
+crims-full-frontend/
+front-end/
 
 

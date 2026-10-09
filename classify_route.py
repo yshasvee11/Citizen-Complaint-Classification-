@@ -7,63 +7,41 @@ complaint object that gets attached to the InfraLynx request.
 Usage:
     from classify_route import classify_and_route
 """
-from classify import classify_department
+from classify import classify_department, classify_request_type
 from entities import extract_entities
 from urgency import estimate_urgency
 
 def classify_and_route(input_dict: dict) -> dict:
     """
     Full Step 5-6 pipeline:
-    1. Classify complaint into a department (zero-shot)
-    2. Extract entities (duration, location, previous complaint)
-    3. Estimate urgency (keyword scorer)
-    4. Package everything into the output contract
-
-    Args:
-        input_dict: Karthik's output:
-            {
-                "original_text": "meri bijli 2 din se nahi aa rahi hai",
-                "detected_language": "hin",
-                "english_text": "my electricity has not come for the past 2 days",
-                "confidence": 0.91
-            }
-
-    Returns:
-        {
-            "original_text": "...",
-            "detected_language": "hin",
-            "english_text": "my electricity has not come for the past 2 days",
-            "department": "Electricity",
-            "department_confidence": 0.87,
-            "needs_manual_review": false,
-            "entities": {
-                "duration": "2 days",
-                "location": null,
-                "previous_complaint": false
-            },
-            "urgency": {
-                "score": 2.0,
-                "label": "Medium"
-            }
-        }
+    1. Classify request type: Complaint vs Improvement
+    2. Classify complaint into a department (zero-shot)
+    3. Extract entities (duration, location, previous complaint)
+    4. Estimate urgency (keyword scorer)
+    5. Package everything into the output contract
     """
     text = input_dict.get("english_text", "")
+    orig_text = input_dict.get("original_text", "")
 
-    # Step 5a: Department classification
+    # Step 5a: Request Type classification (Complaint vs Improvement)
+    req_type_res = classify_request_type(text, original_text=orig_text)
+
+    # Step 5b: Department classification
     dept_result = classify_department(text)
 
-    # Step 5b: Entity extraction
+    # Step 5c: Entity extraction
     entities = extract_entities(text)
 
-    # Step 5c: Urgency estimation
+    # Step 5d: Urgency estimation
     urgency = estimate_urgency(text)
 
-    # Step 6: Package for routing — department is the routing key.
-    # Officer assignment is a NestJS business rule, NOT an NLP task.
+    # Step 6: Package for routing
     return {
-        "original_text": input_dict.get("original_text", ""),
+        "original_text": orig_text,
         "detected_language": input_dict.get("detected_language", ""),
         "english_text": text,
+        "request_type": req_type_res["request_type"],
+        "request_type_confidence": req_type_res["confidence"],
         "department": dept_result["department"],
         "department_confidence": dept_result["confidence"],
         "needs_manual_review": dept_result["needs_manual_review"],

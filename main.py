@@ -17,6 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, RedirectResponse
+
 # ─── Team imports ─────────────────────────────────────────────────────────────
 from preprocess import preprocess                  # Aayush — Steps 1-2
 from postprocess import translate_and_normalize    # Karthik — Steps 3-4
@@ -36,6 +40,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, "front-end")
+STUDIO_DIR = os.path.join(BASE_DIR, "nlp-demo-frontend", "dist")
+
+# Mount InfraLynx civic portal static directories
+if os.path.isdir(FRONTEND_DIR):
+    styles_path = os.path.join(FRONTEND_DIR, "styles")
+    scripts_path = os.path.join(FRONTEND_DIR, "scripts")
+    assets_path = os.path.join(FRONTEND_DIR, "assets")
+    pages_path = os.path.join(FRONTEND_DIR, "pages")
+
+    if os.path.isdir(styles_path):
+        app.mount("/styles", StaticFiles(directory=styles_path), name="styles")
+    if os.path.isdir(scripts_path):
+        app.mount("/scripts", StaticFiles(directory=scripts_path), name="scripts")
+    if os.path.isdir(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+    if os.path.isdir(pages_path):
+        app.mount("/pages", StaticFiles(directory=pages_path), name="pages")
+
+    @app.get("/")
+    @app.get("/index.html")
+    def serve_frontend_index():
+        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+# Mount dedicated NLP Studio model inspection dashboard under /nlp-studio
+if os.path.isdir(STUDIO_DIR):
+    app.mount("/nlp-studio", StaticFiles(directory=STUDIO_DIR, html=True), name="nlp-studio")
 
 # ─── Request/Response models ─────────────────────────────────────────────────
 class AnalyzeRequest(BaseModel):
@@ -109,6 +142,6 @@ async def warmup():
     This forces all models (classifier, spaCy, etc.) into memory so the
     first real citizen request doesn't eat a 30-90 second delay.
     """
-    print("🔄 Warming up NLP pipeline...")
+    print("[...] Warming up NLP pipeline...")
     full_pipeline("test sentence for warming up the models")
-    print("✅ All models loaded and warm. NLP service is ready.")
+    print("[OK] All models loaded and warm. NLP service is ready.")

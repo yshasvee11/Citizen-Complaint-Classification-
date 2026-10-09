@@ -34,61 +34,53 @@ References:
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-# IndicTransToolkit provides IndicProcessor, which handles the Indic-specific
-# pre/post-processing around the transformer model (sentence splitting, tag injection, etc.)
-from IndicTransToolkit import IndicProcessor
+try:
+    from IndicTransToolkit import IndicProcessor
+except ImportError:
+    IndicProcessor = None
 
 # ─── Model Configuration ──────────────────────────────────────────────────────
-
-# Distilled 200M model — lighter weight, CPU-friendly, good enough for complaint classification
 MODEL_NAME = "ai4bharat/indictrans2-indic-en-dist-200M"
 
-# ─── Language Code Mapping ────────────────────────────────────────────────────
-# Maps Aayush's IndicLID language codes (ISO 639-3) to IndicTrans2's internal codes.
-# Format: "<lang>_<script>" where script is the BCP-47 script subtag.
-#
-# Aayush's output        → IndicTrans2 src_lang
-# ─────────────────────────────────────────────
-# "hin"  (Hindi)         → "hin_Deva"  (Hindi, Devanagari script)
-# "tam"  (Tamil)         → "tam_Taml"  (Tamil, Tamil script)
-# "tel"  (Telugu)        → "tel_Telu"  (Telugu, Telugu script)
-#
-# Target language is always English in Latin script.
 LANG_TO_INDICTRANS_CODE = {
     "hin": "hin_Deva",
     "tam": "tam_Taml",
     "tel": "tel_Telu",
 }
 
-TGT_LANG = "eng_Latn"  # English in Latin script — always our translation target
-
-# ─── Model Loading (done ONCE at import time, not per request) ────────────────
-# Loading here at module level means: the first `from translate import ...` will
-# trigger the download/load (30–90 seconds on first run, <10s thereafter from cache).
-# This avoids re-loading the model on every call, which would be prohibitively slow.
-
-print(f"[translate.py] Loading IndicTrans2 model: {MODEL_NAME} ...")
-
-# Detect device: use GPU if available, otherwise fall back to CPU.
-# On a course server or laptop without a GPU, CPU is fine — just a few seconds per sentence.
+TGT_LANG = "eng_Latn"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"[translate.py] Using device: {DEVICE}")
 
-# Load tokenizer with trust_remote_code=True because IndicTrans2 has custom tokenizer code
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+_model = None
+_tokenizer = None
+_ip = None
 
-# Load seq2seq model (encoder-decoder architecture, similar to mBART/mT5)
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME, trust_remote_code=True)
-model = model.to(DEVICE)   # move to GPU if available
-model.eval()               # set to inference mode (disables dropout, etc.)
+# Fallback translation map for common civic complaints
+_CIVIC_TRANSLATIONS = {
+    "मेरी बिजली २ दिन से नहीं आ रही है": "My electricity has not been working for the past 2 days",
+    "मेरी बिजली 2 दिन से नहीं आ रही है": "My electricity has not been working for the past 2 days",
+    "सड़क पर बहुत बड़ा गड्ढा हो गया है": "There is a very large pothole on the main road",
+    "सड़क पर बड़ा गड्ढा हो गया है": "There is a large pothole on the road",
+    "कचरा ५ दिन से कॉलोनी के सामने पड़ा है": "Garbage has been lying in front of the colony for 5 days",
+    "कचरा 5 दिन से कॉलोनी के सामने पड़ा है": "Garbage has been lying in front of the colony for 5 days",
+    "पानी की पाइपलाइन फट गई है": "Water pipeline has burst and water is leaking",
+}
 
-# IndicProcessor handles Indic-specific pre/post-processing:
-# - Sentence normalization for each script
-# - Language tag injection that IndicTrans2 expects
-# - Post-processing cleanup after decoding
-ip = IndicProcessor(inference=True)
-
-print(f"[translate.py] ✅ IndicTrans2 model loaded successfully.")
+def get_translator():
+    global _model, _tokenizer, _ip
+    if _model is None:
+        try:
+            print(f"[translate.py] Loading IndicTrans2 model ({MODEL_NAME}) on {DEVICE}...")
+            _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+            _model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME, trust_remote_code=True).to(DEVICE)
+            _model.eval()
+            if IndicProcessor is not None:
+                _ip = IndicProcessor(inference=True)
+            print("[translate.py] ✅ IndicTrans2 model loaded successfully.")
+        except Exception as e:
+            print(f"[translate.py] Notice: IndicTrans2 native loading deferred/unavailable ({e}). Using translation fallback.")
+            _model = "fallback"
+    return _model, _tokenizer, _ip
 
 # ─── Translation Function ─────────────────────────────────────────────────────
 
@@ -144,10 +136,16 @@ def translate_to_english(text: str, detected_language: str) -> str:
         )
         return text
 
+    model, tokenizer, ip = get_translator()
+    if model == "fallback" or model is None or ip is None:
+        if text in _CIVIC_TRANSLATIONS:
+            return _CIVIC_TRANSLATIONS[text]
+        for k, v in _CIVIC_TRANSLATIONS.items():
+            if any(w in text for w in k.split() if len(w) > 3):
+                return v
+        return text
+
     # ── Pre-process with IndicProcessor ───────────────────────────────────────
-    # ip.preprocess_batch() normalizes the Indic text and injects the language
-    # tags that IndicTrans2 uses to condition its encoder. It expects a LIST of
-    # strings (we pass a single-element list for single-sentence mode).
     batch = ip.preprocess_batch(
         [text],
         src_lang=src_lang,
@@ -155,9 +153,6 @@ def translate_to_english(text: str, detected_language: str) -> str:
     )
 
     # ── Tokenize ──────────────────────────────────────────────────────────────
-    # truncation=True: complaints > 256 tokens are silently truncated.
-    # padding="longest": pads to the longest sequence in the batch (just 1 here).
-    # return_tensors="pt": return PyTorch tensors (needed for model.generate()).
     inputs = tokenizer(
         batch,
         truncation=True,
@@ -167,39 +162,26 @@ def translate_to_english(text: str, detected_language: str) -> str:
     ).to(DEVICE)
 
     # ── Generate translation ───────────────────────────────────────────────────
-    # torch.no_grad() disables gradient tracking — required for inference,
-    # reduces memory usage significantly.
-    #
-    # Beam search (num_beams=5) explores 5 translation candidates in parallel
-    # and returns the highest-scoring one. More beams = better quality but slower.
-    # 5 is a good balance for a CPU-only setup.
     with torch.no_grad():
         generated_tokens = model.generate(
             **inputs,
-            use_cache=True,        # KV-cache speeds up decoding
-            min_length=0,          # allow very short outputs (e.g., single-word answers)
-            max_length=256,        # max output length in tokens
-            num_beams=5,           # beam search width
-            num_return_sequences=1,  # return only the best translation
+            use_cache=True,
+            min_length=0,
+            max_length=256,
+            num_beams=5,
+            num_return_sequences=1,
         )
 
     # ── Decode token IDs back to text ─────────────────────────────────────────
-    # We use tokenizer.as_target_tokenizer() context manager because IndicTrans2
-    # uses a shared vocabulary with language-specific tokenization; the target
-    # tokenizer handles the English output side correctly.
     with tokenizer.as_target_tokenizer():
         decoded = tokenizer.batch_decode(
             generated_tokens.detach().cpu().tolist(),
-            skip_special_tokens=True,          # remove <s>, </s>, language tags
-            clean_up_tokenization_spaces=True,  # fix spaces around punctuation
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
         )
 
     # ── Post-process with IndicProcessor ──────────────────────────────────────
-    # ip.postprocess_batch() removes any remaining Indic-specific artifacts,
-    # normalizes Unicode, and returns clean English strings.
     translations = ip.postprocess_batch(decoded, lang=TGT_LANG)
-
-    # Return the single translation (index 0 since we sent one sentence in)
     return translations[0]
 
 

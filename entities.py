@@ -9,7 +9,7 @@ import spacy
 # Load once at module level
 print("Loading spaCy en_core_web_sm for entity extraction...")
 nlp = spacy.load("en_core_web_sm")
-print("✅ spaCy model loaded.")
+print("[OK] spaCy model loaded.")
 
 # Regex fallback for duration — catches "3 days", "2 hours", "1 week", etc.
 DURATION_REGEX = re.compile(

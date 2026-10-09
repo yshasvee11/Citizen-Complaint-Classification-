@@ -11,6 +11,10 @@ from entities import extract_entities
 from urgency import estimate_urgency
 from classify_route import classify_and_route
 import json
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 def separator(title: str):
     print(f"\n{'='*70}")
@@ -119,13 +123,13 @@ def test_classify():
     separator("TESTING: classify_department()")
     for test in TEST_INPUTS:
         result = classify_department(test["input"]["english_text"])
-        match = "✅" if result["department"] == test["expected_department"] else "⚠️"
+        match = "[OK]" if result["department"] == test["expected_department"] else "[WARN]"
         print(f"\n  {match} Test #{test['id']}: {test['description']}")
         print(f"     Input:    \"{test['input']['english_text']}\"")
         print(f"     Got:      {result['department']} ({result['confidence']})")
         print(f"     Expected: {test['expected_department']}")
         if result["needs_manual_review"]:
-            print(f"     ⚡ Flagged for manual review")
+            print(f"     [!] Flagged for manual review")
 
 def test_entities():
     separator("TESTING: extract_entities()")
@@ -156,7 +160,7 @@ def test_urgency():
 
     for text, expected in edge_cases:
         result = estimate_urgency(text)
-        match = "✅" if result["label"] == expected else "⚠️"
+        match = "[OK]" if result["label"] == expected else "[WARN]"
         print(f"  {match} \"{text}\"")
         print(f"     Got: {result['label']} (score={result['score']}), Expected: {expected}")
 
@@ -168,11 +172,11 @@ def test_full_pipeline():
         pp(result)
 
 if __name__ == "__main__":
-    print("\n" + "🧪 InfraLynx NLP — Step 5-6 Test Suite" + "\n")
+    print("\n" + "[TEST] InfraLynx NLP -- Step 5-6 Test Suite" + "\n")
     test_classify()
     test_entities()
     test_urgency()
     test_full_pipeline()
     separator("ALL TESTS COMPLETE")
-    print("  Review the output above for any ⚠️ mismatches.")
-    print("  Share the full test_full_pipeline() output with Aayush and Karthik.\n")
+    print("  Review the output above for any [!] mismatches.")
+    print("  Share the full test_full_pipeline() output with team members.\n")
