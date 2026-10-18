@@ -39,11 +39,11 @@ def get_classifier():
 
 LABEL_TO_DEPT = {
     "street lighting and electricity outage": "lighting",
-    "road damage and potholes": "roads",
+    "road damage, potholes, and speed breakers": "roads",
     "water supply and pipeline leakage": "water",
     "drainage and sewage overflow": "drainage",
     "garbage and sanitation waste": "sanitation",
-    "parks and green infrastructure": "green",
+    "parks, fallen tree branches, and green infrastructure": "green",
 }
 
 def classify_department(text: str, candidate_labels: list = None) -> dict:
@@ -99,8 +99,8 @@ def classify_department(text: str, candidate_labels: list = None) -> dict:
         "lighting": ["electric", "electricity", "power", "light", "street light", "bijli"],
         "drainage": ["drain", "drainage", "sewage", "gutter", "overflow"],
         "sanitation": ["garbage", "trash", "waste", "kachra", "dustbin"],
-        "roads": ["road", "pothole", "tar", "street damaged", "pavement"],
-        "green": ["tree", "park", "garden", "branch", "greenery"]
+        "roads": ["road", "pothole", "tar", "street damaged", "pavement", "speed breaker"],
+        "green": ["tree", "park", "garden", "branch", "greenery", "tree branch"]
     }
     # If the predicted department has direct keyword support in the text, corroborate confidence
     if top_label in dept_keywords and any(kw in t_low for kw in dept_keywords[top_label]):
@@ -141,6 +141,7 @@ def classify_request_type(english_text: str, original_text: str = "") -> dict:
         "overflow", "overflowing", "sewage", "gutter", "drainage block", "stench",
         "badbu", "kachra", "garbage", "trash", "accident", "hazard", "danger",
         "dark", "power cut", "blackout", "nahi aa rahi", "tuta", "gaddha",
+        "complaint", "pending", "unresolved", "no action",
         "உடைந்து", "செயல்படவில்லை", "పనిచేయడం లేదు", "పగిలిపోయింది"
     ]
 

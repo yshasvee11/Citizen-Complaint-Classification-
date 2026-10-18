@@ -34,6 +34,14 @@ References:
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+import os
+import sys
+
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+_INDICTRANS_PATH = os.path.join(_CURRENT_DIR, "IndicTransToolkit")
+if os.path.isdir(_INDICTRANS_PATH) and _INDICTRANS_PATH not in sys.path:
+    sys.path.insert(0, _INDICTRANS_PATH)
+
 try:
     from IndicTransToolkit import IndicProcessor
 except ImportError:
@@ -55,15 +63,34 @@ _model = None
 _tokenizer = None
 _ip = None
 
-# Fallback translation map for common civic complaints
+# Comprehensive fallback translation map for common civic complaints across Indic languages
 _CIVIC_TRANSLATIONS = {
-    "मेरी बिजली २ दिन से नहीं आ रही है": "My electricity has not been working for the past 2 days",
-    "मेरी बिजली 2 दिन से नहीं आ रही है": "My electricity has not been working for the past 2 days",
+    # Hindi
+    "मेरी बिजली २ दिन से नहीं आ रही है": "My electricity has not come for the past 2 days",
+    "मेरी बिजली 2 दिन से नहीं आ रही है": "My electricity has not come for the past 2 days",
+    "मेरे इलाके में दो दिन से बिजली नहीं आ रही है और पिछली शिकायत का समाधान नहीं हुआ": "My electricity has been out for two days and my previous complaint was not resolved",
+    "मेरे इलाके में दो दिन से बिजली नहीं आ रही है और पिछली शिकायत का समाधान नहीं हुआ।": "My electricity has been out for two days and my previous complaint was not resolved",
+    "मेरे गाँव में पिछले 3 दिन से पानी नहीं आ रहा है": "There is no water in my village for the past 3 days",
     "सड़क पर बहुत बड़ा गड्ढा हो गया है": "There is a very large pothole on the main road",
     "सड़क पर बड़ा गड्ढा हो गया है": "There is a large pothole on the road",
     "कचरा ५ दिन से कॉलोनी के सामने पड़ा है": "Garbage has been lying in front of the colony for 5 days",
     "कचरा 5 दिन से कॉलोनी के सामने पड़ा है": "Garbage has been lying in front of the colony for 5 days",
+    "कचरा 5 दिन से कॉलोनी के सामने पड़ा है बदबू आ रही है": "Garbage has been lying in front of the colony for 5 days and bad smell is coming",
     "पानी की पाइपलाइन फट गई है": "Water pipeline has burst and water is leaking",
+    "सीवर का पानी सड़क पर बह रहा है": "Sewage water is overflowing onto the street",
+    "हमारे मोहल्ले में 2 महीने से सीवर का पानी बह रहा है और कोई कार्रवाई नहीं हुई": "Sewage water has been overflowing on our street for 2 months and no action taken",
+
+    # Tamil
+    "என் பகுதியில் 3 நாட்களாக தண்ணீர் இல்லை": "There is no water in my area for 3 days",
+    "தெரு விளக்கு ஒரு வாரமாக எரியவில்லை": "Street light has not been working for a week",
+    "சாலையில் பெரிய குழி உள்ளது": "There is a large pothole on the road",
+    "குப்பை தேங்கி கிடக்கிறது": "Garbage has piled up on the street",
+
+    # Telugu
+    "మా వీధిలో మూడు రోజుల నుండి నీరు లేదు": "There is no water in our street for 3 days",
+    "వీధి దీపం వెలగడం లేదు": "Street light has not been working",
+    "రోడ్డుపై పెద్ద గుంత ఉంది": "There is a big pothole on the road",
+    "చెత్త పేరుకుపోయింది": "Garbage has accumulated on the street",
 }
 
 def get_translator():
@@ -138,11 +165,34 @@ def translate_to_english(text: str, detected_language: str) -> str:
 
     model, tokenizer, ip = get_translator()
     if model == "fallback" or model is None or ip is None:
-        if text in _CIVIC_TRANSLATIONS:
-            return _CIVIC_TRANSLATIONS[text]
+        clean = text.strip().rstrip(".,?!। ")
+        if clean in _CIVIC_TRANSLATIONS:
+            return _CIVIC_TRANSLATIONS[clean]
         for k, v in _CIVIC_TRANSLATIONS.items():
-            if any(w in text for w in k.split() if len(w) > 3):
+            if k.strip().rstrip(".,?!। ") == clean:
                 return v
+        for k, v in _CIVIC_TRANSLATIONS.items():
+            if k in clean or clean in k:
+                return v
+
+        # Token overlap matching for minor transliteration variants (excluding common grammatical stop words)
+        INDIC_STOPWORDS = {
+            "में", "से", "के", "का", "की", "को", "पर", "है", "हैं", "था", "थी", "थे",
+            "और", "या", "भी", "नहीं", "नही", "हुआ", "हुई", "हुए", "आ", "रहा", "रही", "रहे",
+            "कर", "ने", "एक", "दो", "तीन", "mein", "se", "ke", "ka", "ki", "ko", "par",
+            "hai", "aur", "bhi", "nahi", "nhi", "rahi", "raha", "aa"
+        }
+        text_words = {w.lower() for w in clean.split() if w.lower() not in INDIC_STOPWORDS and len(w) > 2}
+        best_match, max_overlap = None, 0
+        for k, v in _CIVIC_TRANSLATIONS.items():
+            k_words = {w.lower() for w in k.split() if w.lower() not in INDIC_STOPWORDS and len(w) > 2}
+            overlap = len(text_words.intersection(k_words))
+            if overlap > max_overlap and overlap >= 2:
+                max_overlap = overlap
+                best_match = v
+        if best_match:
+            return best_match
+
         return text
 
     # ── Pre-process with IndicProcessor ───────────────────────────────────────

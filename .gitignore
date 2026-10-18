@@ -1,17 +1,27 @@
-# nlp-env/
+# Virtual environments
 nlp-env/
 venv/
 env/
+.venv/
+
+# Python cache & build artifacts
 __pycache__/
 *.pyc
+*.egg-info/
+dist/
+build/
 .env
 
-# Third-party cloned repos & models
+# Third-party cloned repos & model weights
 IndicLID/
+IndicTransToolkit/
+models
 node_modules/
+
+# Local working documents
+Steps_3-4_Plan_for_Karthik.md
+InfraLynx_CRIMS_NLP_Course_Project_Abstract.pdf
 
 # Civic Complaint Portals (InfraLynx full frontend - not part of NLP pipeline)
 crims-full-frontend/
 front-end/
-
-

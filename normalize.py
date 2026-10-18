@@ -104,18 +104,24 @@ def fix_elongated_words(text: str) -> str:
     fixed_words = []
 
     for word in words:
-        # nlp.vocab[word].is_oov is True when the word is NOT in spaCy's vocabulary.
-        # Real English words like "committee", "address" are in-vocab → we leave them alone.
-        # Elongated slang like "pleeease", "noooo" are OOV → we collapse repeats.
-        if nlp.vocab[word].is_oov:
-            # Regex: match any character followed by 2+ of the same character
-            # Replace with the character + itself (max 2 repeats retained)
-            # e.g. "pleee" → "plee" → hmm, we do this iteratively via regex
-            # r'(.)\1{2,}' matches a char followed by 2 or more of itself
-            # r'\1\1' replaces with exactly 2 of that char
-            # This handles "pleeease" → "pleease" — still OOV, but that's OK.
-            # The classifier can still handle "pleease". We avoid over-collapsing.
-            word = re.sub(r'(.)\1{2,}', r'\1\1', word)
+        # Check if the word contains 3 or more repeated consecutive characters
+        if re.search(r'(.)\1{2,}', word):
+            cand_single = re.sub(r'(.)\1{2,}', r'\1', word)
+            cand_double = re.sub(r'(.)\1{2,}', r'\1\1', word)
+
+            in_single = cand_single.lower() in nlp.vocab.strings
+            in_double = cand_double.lower() in nlp.vocab.strings
+
+            if in_single and not in_double:
+                word = cand_single
+            elif in_double and not in_single:
+                word = cand_double
+            elif in_single and in_double:
+                # Both valid (e.g. soon vs son from sooooon) — prefer double to retain original vowel intention
+                word = cand_double
+            else:
+                # Neither is a recognized English word (e.g. Hindi slang nahiii -> nahii)
+                word = cand_single if cand_single.lower() in nlp.vocab.strings else cand_double
         fixed_words.append(word)
 
     return " ".join(fixed_words)
