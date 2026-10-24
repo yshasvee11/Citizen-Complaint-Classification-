@@ -185,11 +185,8 @@ def normalize_text(text: str) -> str:
     text = fix_elongated_words(text)
 
     # ── Step 4: Strip symbols and emojis ──────────────────────────────────────
-    # Keep: a-z, 0-9, whitespace, and basic punctuation (. , ? ! for sentence structure)
-    # Remove: everything else (emojis, @, #, *, ^, ~, non-ASCII symbols, etc.)
-    # Why keep punctuation? Exclamation marks signal urgency ("no water for 3 days!!")
-    # and question marks indicate queries. Yshasvee's urgency scorer may use these.
-    text = re.sub(r'[^a-z0-9\s.,?!]', ' ', text)
+    # Keep: word characters (\w matches a-z, 0-9 and Unicode script letters), whitespace, and basic punctuation
+    text = re.sub(r'[^\w\s.,?!]', ' ', text)
 
     # ── Step 5: Collapse extra whitespace ─────────────────────────────────────
     # Step 4 can introduce multiple consecutive spaces (where symbols were removed).

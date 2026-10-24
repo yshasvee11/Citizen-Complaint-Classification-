@@ -42,7 +42,7 @@ LABEL_TO_DEPT = {
     "road damage, potholes, and speed breakers": "roads",
     "water supply and pipeline leakage": "water",
     "drainage and sewage overflow": "drainage",
-    "garbage and sanitation waste": "sanitation",
+    "garbage, pest infestation, and sanitation waste": "sanitation",
     "parks, fallen tree branches, and green infrastructure": "green",
 }
 

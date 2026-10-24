@@ -13,6 +13,11 @@ Run with:
 
 import time
 import json
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from main import full_pipeline
 
 BENCHMARK_DATASET = [

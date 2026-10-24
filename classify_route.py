@@ -33,12 +33,16 @@ def classify_and_route(input_dict: dict) -> dict:
     entities = extract_entities(text)
 
     # Step 5d: Urgency estimation
-    urgency = estimate_urgency(text)
+    urgency = estimate_urgency(text, original_text=orig_text)
 
     # Step 6: Package for routing
     return {
         "original_text": orig_text,
         "detected_language": input_dict.get("detected_language", ""),
+        "script": input_dict.get("script", "other"),
+        "is_english": input_dict.get("is_english", False),
+        "native_script_text": input_dict.get("native_script_text", orig_text),
+        "confidence": input_dict.get("confidence", 0.95),
         "english_text": text,
         "request_type": req_type_res["request_type"],
         "request_type_confidence": req_type_res["confidence"],

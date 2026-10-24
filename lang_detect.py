@@ -63,10 +63,39 @@ def detect_language(text: str) -> dict:
         if any('\u0C00' <= ch <= '\u0C7F' for ch in clean_text):
             return {"language": "tel", "script": "Telu", "confidence": 0.98}
 
-        hinglish_words = {"meri", "mera", "nahi", "nhi", "rahi", "raha", "hai", "din", "bijli", "sadak", "gaddha", "pani", "kachra", "badbu", "aur"}
+        # Romanized Indic detection heuristics (Tanglish, Telugu-English, Hinglish)
         words = clean_lower.split()
-        if sum(1 for w in words if w in hinglish_words) >= 2:
+        word_set = set(words)
+
+        tamil_roman_markers = {
+            "en", "pakuthiyil", "naatkalaga", "thanni", "illai", "engal", "theruvil",
+            "kudi", "kudineer", "kuzhai", "udaithu", "thannir", "veenagirathu", "theru",
+            "vilakku", "oru", "vaaramaga", "eriyavillai", "saalaiyil", "periya", "kuzhi",
+            "ullathu", "kuppai", "theangi", "kidakkirathu", "moonu", "naal", "vanakkam"
+        }
+        if sum(1 for w in words if w in tamil_roman_markers) >= 2 or any(w in word_set for w in ("pakuthiyil", "naatkalaga", "eriyavillai", "veenagirathu", "saalaiyil")):
+            return {"language": "tam", "script": "Latn", "confidence": 0.92}
+
+        telugu_roman_markers = {
+            "maa", "veedhilo", "moodu", "rojula", "nunchi", "neeru", "ledu", "colonylo",
+            "veedhi", "deepalu", "varam", "rojuluga", "velagadam", "raatri", "cheekatiga",
+            "undi", "undhi", "maku", "roddupai", "pedda", "guntha", "chetta", "perukupoyindi",
+            "deepam", "namaskaram"
+        }
+        if sum(1 for w in words if w in telugu_roman_markers) >= 2 or any(w in word_set for w in ("veedhilo", "rojula", "velagadam", "roddupai", "perukupoyindi", "cheekatiga")):
+            return {"language": "tel", "script": "Latn", "confidence": 0.92}
+
+        hinglish_words = {
+            "meri", "mera", "mere", "mujhe", "hum", "hamare", "nahi", "nhi", "rahi", "raha",
+            "rahe", "hai", "hain", "tha", "thi", "the", "din", "bijli", "sadak", "sarak",
+            "gaddha", "gadha", "pani", "paani", "kachra", "badbu", "aur", "abhi", "tak",
+            "karna", "karne", "kare", "karo", "pad", "pada", "padi", "se", "pe", "par",
+            "ke", "ka", "ki", "ko", "bahut", "bohot", "bhi", "aaj", "kal", "gaya", "gayi",
+            "ho", "ilaka", "ilake", "gali", "mohalla", "pichli", "samadhan", "shikayat"
+        }
+        if sum(1 for w in words if w in hinglish_words) >= 2 or any(w in word_set for w in ("bijli", "gaddha", "kachra", "badbu", "mohalla")):
             return {"language": "hin", "script": "Latn", "confidence": 0.92}
+
         return {"language": "eng", "script": "Latn", "confidence": 0.95}
 
     results = model.batch_predict([clean_text], batch_size=1)

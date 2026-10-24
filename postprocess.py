@@ -184,6 +184,9 @@ def translate_and_normalize(input_dict: dict) -> dict:
     return {
         "original_text":     original_text,
         "detected_language": detected_language,
+        "script":            input_dict.get("script", "other"),
+        "is_english":        input_dict.get("is_english", False),
+        "native_script_text": input_dict.get("native_script_text", original_text),
         "english_text":      english_text,
         "confidence":        confidence,
     }

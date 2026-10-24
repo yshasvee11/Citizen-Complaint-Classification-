@@ -69,6 +69,11 @@ if os.path.isdir(FRONTEND_DIR):
 # Mount dedicated NLP Studio model inspection dashboard under /nlp-studio
 if os.path.isdir(STUDIO_DIR):
     app.mount("/nlp-studio", StaticFiles(directory=STUDIO_DIR, html=True), name="nlp-studio")
+    if not os.path.isdir(FRONTEND_DIR):
+        @app.get("/")
+        @app.get("/index.html")
+        def redirect_to_studio():
+            return RedirectResponse(url="/nlp-studio/")
 
 # ─── Request/Response models ─────────────────────────────────────────────────
 class AnalyzeRequest(BaseModel):
@@ -106,6 +111,12 @@ def full_pipeline(text: str, debug: bool = False) -> dict:
 
     # Total processing time
     step_5_6["processing_time_ms"] = round((time.time() - t0) * 1000)
+    # Ensure Step 1-2 metadata is explicitly preserved
+    step_5_6["script"] = step_1_2.get("script")
+    step_5_6["is_english"] = step_1_2.get("is_english")
+    step_5_6["native_script_text"] = step_1_2.get("native_script_text")
+    step_5_6["confidence"] = step_1_2.get("confidence")
+
     if debug:
         step_5_6["pipeline_log"] = timings
 

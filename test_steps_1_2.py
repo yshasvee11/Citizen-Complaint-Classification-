@@ -6,6 +6,10 @@ Runs all 8 test cases from Section 9 of Steps_1-2_Plan_for_Aayush.md.
 """
 import json
 import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from preprocess import preprocess
 
 TEST_CASES = [
