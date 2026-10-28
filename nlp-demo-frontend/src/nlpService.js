@@ -157,6 +157,24 @@ export async function checkBackendHealth() {
 }
 
 /**
+ * Check Groq AI API status (cached by backend, only queries once unless forceRefresh=true)
+ */
+export async function checkGroqStatus(forceRefresh = false) {
+  try {
+    const res = await fetch(`${FASTAPI_URL}/groq/status?refresh=${forceRefresh}`, {
+      method: "GET",
+      signal: AbortSignal.timeout(6000)
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { checked: true, working: false, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return { checked: true, working: false, error: err.message || "Failed to reach backend" };
+  }
+}
+
+/**
  * Run complaint through NLP pipeline.
  * Tries FastAPI first; if offline, transparently falls back to accurate emulator.
  */
@@ -166,7 +184,7 @@ export async function analyzeComplaint(text, debug = true) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(15000)
     });
 
     if (response.ok) {
@@ -294,7 +312,7 @@ function emulateNlpPipeline(text) {
   } else if (engLower.includes("electric") || engLower.includes("light") || engLower.includes("power") || engLower.includes("bijli") || engLower.includes("dark")) {
     department = "lighting";
     department_confidence = 0.92;
-  } else if (engLower.includes("garbage") || engLower.includes("waste") || engLower.includes("kachra") || engLower.includes("smell") || engLower.includes("stench")) {
+  } else if (engLower.includes("garbage") || engLower.includes("waste") || engLower.includes("kachra") || engLower.includes("smell") || engLower.includes("stench") || engLower.includes("clean") || engLower.includes("safai")) {
     department = "sanitation";
     department_confidence = 0.93;
   } else if (engLower.includes("tree") || engLower.includes("branch") || engLower.includes("park") || engLower.includes("grass")) {
@@ -306,10 +324,10 @@ function emulateNlpPipeline(text) {
   }
 
   // Urgency logic
-  if (engLower.includes("critical") || engLower.includes("epidemic") || engLower.includes("severe") || engLower.includes("hazard")) {
+  if (engLower.includes("critical") || engLower.includes("epidemic") || engLower.includes("severe") || engLower.includes("hazard") || (duration && (duration.includes("100") || duration.includes("1000")))) {
     urgencyScore = 4.0;
     urgencyLabel = "Critical";
-  } else if (engLower.includes("urgent") || engLower.includes("accident") || engLower.includes("flooding") || (duration && duration.includes("5 day"))) {
+  } else if (engLower.includes("urgent") || engLower.includes("accident") || engLower.includes("flooding") || (duration && (duration.includes("5 day") || duration.includes("week") || duration.includes("month")))) {
     urgencyScore = 3.2;
     urgencyLabel = "High";
   } else if (duration) {

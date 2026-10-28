@@ -100,10 +100,32 @@ URGENCY_SIGNALS = {
     "leak": 1.2,
     "leaking": 1.2,
     "blocked": 1.2,
-    "garbage": 1.2,
-    "stench": 1.2,
+    "garbage": 1.5,
+    "kachra": 1.5,
+    "trash": 1.5,
+    "waste": 1.5,
+    "stench": 1.5,
+    "foul smell": 1.5,
+    "bad smell": 1.5,
+    "badbu": 1.5,
+    "safai nahi": 1.8,
+    "safai": 1.5,
+    "not cleaned": 1.8,
+    "not been cleaned": 1.8,
+    "not clean": 1.5,
+    "no cleaning": 1.8,
+    "cleaned": 1.2,
+    "cleaning": 1.2,
+    "dirty": 1.2,
+    "filth": 1.5,
+    "pest": 1.5,
+    "infestation": 2.0,
     "dark": 1.0,
     "urgent": 1.5,
+    "सफाई": 1.5,
+    "कचरा": 1.5,
+    "कूड़ा": 1.5,
+    "बदबू": 1.5,
 }
 
 def _is_multi_day_duration(text_lower: str) -> bool:
@@ -122,6 +144,24 @@ def _is_multi_day_duration(text_lower: str) -> bool:
     if m and int(m.group(1)) >= 2:
         return True
     return False
+
+def extract_days_count(text_lower: str) -> int:
+    m = re.search(r'(\d+)\s*(days?|दिन|din|naatkal|rojula)', text_lower)
+    if m:
+        return int(m.group(1))
+    if any(k in text_lower for k in ["two days", "2 days", "2 day", "do din", "दो दिन"]):
+        return 2
+    if any(k in text_lower for k in ["three days", "3 days", "3 day", "teen din", "तीन दिन"]):
+        return 3
+    if any(k in text_lower for k in ["four days", "4 days", "chaar din"]):
+        return 4
+    if any(k in text_lower for k in ["five days", "5 days", "paanch din", "पाँच दिन"]):
+        return 5
+    if any(k in text_lower for k in ["week", "weeks", "hafta", "வாரம்", "వారం"]):
+        return 7
+    if any(k in text_lower for k in ["month", "months", "mahina"]):
+        return 30
+    return 0
 
 def score_urgency(text: str, original_text: str = "") -> float:
     """
@@ -148,24 +188,42 @@ def score_urgency(text: str, original_text: str = "") -> float:
                 # Only take the maximum single signal weight per category or highest severity
                 matched_score = max(matched_score, URGENCY_SIGNALS[keyword])
 
+    days_count = extract_days_count(text_lower)
+
     # Escalation: Essential domestic utility outage (electricity/power or drinking water supply)
-    # A prolonged domestic power blackout or water supply cut (>= 2 days) is High urgency (2.2).
-    # Single-pole outdoor street lights ("street light off for a week") remain Medium (1.5).
     is_street_light_only = any(sl in text_lower for sl in ["street light", "streetlight", "street lights", "streetlights", "lamp post", "khamba", "batti", "vilakku", "deepalu", "deepam"])
     is_power_or_water = any(u in text_lower for u in ["electricity", "power", "water", "bijli", "pani", "current", "drinking water", "pipeline"])
     has_outage_signal = any(s in text_lower for s in ["not come", "has not come", "no electricity", "no power", "no water", "cut", "outage", "not working", "nahi aa rahi", "ledu", "illai", "broken", "burst"])
 
     if is_power_or_water and has_outage_signal and not is_street_light_only:
-        if _is_multi_day_duration(text_lower):
+        if days_count >= 2 or _is_multi_day_duration(text_lower):
             matched_score = max(matched_score, 2.2)  # High urgency (>= 2.0)
         else:
             matched_score = max(matched_score, 1.5)  # Medium for brief/single-day outage
     elif is_power_or_water and any(d in text_lower for d in ["day", "days", "din", "naatkal", "rojula"]):
         matched_score = max(matched_score, 1.5)
 
+    # Prolonged duration escalation across ALL civic domains (sanitation, roads, drainage, water)
+    if days_count >= 100:
+        matched_score = max(matched_score, 3.0)  # Extreme chronic neglect (100+ days / 1000 days) -> Critical
+    elif days_count >= 30:
+        if matched_score > 0 and matched_score < 2.0:
+            matched_score = 2.0
+    elif days_count >= 7:
+        if not is_street_light_only and matched_score > 0 and matched_score < 1.8:
+            matched_score = 1.8
+        elif is_street_light_only and matched_score > 0:
+            matched_score = 1.0
+    elif days_count >= 2:
+        if matched_score > 0 and matched_score < 1.5:
+            matched_score = 1.5
+
     # Escalation factor for multi-week/month chronic neglect or repeated follow-ups
     if any(k in text_lower for k in ["week", "weeks", "month", "months", "multiple complaints", "complained before", "no action taken", "no action"]):
-        matched_score = min(5.0, matched_score + 1.0)
+        if days_count >= 100:
+            matched_score = min(5.0, matched_score + 1.0)
+        else:
+            matched_score = min(2.5, matched_score + 1.0)
 
     return round(matched_score, 1)
 

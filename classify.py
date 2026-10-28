@@ -38,15 +38,15 @@ def get_classifier():
     return _classifier
 
 LABEL_TO_DEPT = {
-    "street lighting and electricity outage": "lighting",
+    "street lighting, electricity outage, and dark roads": "lighting",
     "road damage, potholes, and speed breakers": "roads",
-    "water supply and pipeline leakage": "water",
-    "drainage and sewage overflow": "drainage",
-    "garbage, pest infestation, and sanitation waste": "sanitation",
+    "drinking water supply, water cut, and pipeline leakage": "water",
+    "drainage block, sewage overflow, and gutter problems": "drainage",
+    "garbage collection, street cleaning, sanitation waste, and pest infestation": "sanitation",
     "parks, fallen tree branches, and green infrastructure": "green",
 }
 
-def classify_department(text: str, candidate_labels: list = None) -> dict:
+def classify_department(text: str, candidate_labels: list = None, original_text: str = "") -> dict:
     """
     Classify english_text into one of the DEPARTMENTS using zero-shot classification.
     Returns:
@@ -61,50 +61,73 @@ def classify_department(text: str, candidate_labels: list = None) -> dict:
         candidate_labels = list(LABEL_TO_DEPT.keys())
         use_descriptive = True
 
-    if not text or not text.strip():
+    combined_low = f"{text or ''} {original_text or ''}".strip().lower()
+
+    if not combined_low:
         return {
             "department": "Unclassified",
             "confidence": 0.0,
             "needs_manual_review": True,
         }
 
+    dept_keywords = {
+        "water": ["water", "pipe", "pipeline", "tap", "leak", "leaking", "leakage", "drinking water", "pani", "neeru", "thanni", "தண்ணீர்", "நீరు", "पानी"],
+        "lighting": ["electric", "electricity", "power", "power cut", "light", "lights", "street light", "streetlight", "streetlights", "lamp", "khamba", "bijli", "current", "dark", "चमक", "बिजली", "விளக்கு", "దీపాలు"],
+        "drainage": ["drain", "drainage", "sewage", "gutter", "overflow", "overflowing", "sewer", "dirty water", "naali", "सीवर", "नाली"],
+        "sanitation": ["garbage", "trash", "waste", "kachra", "dustbin", "clean", "cleaned", "cleaning", "cleanliness", "safai", "sweeping", "litter", "stench", "badbu", "smell", "pest", "infestation", "mosquito", "बदबू", "कचरा", "सफाई", "कूड़ा", "குப்பை", "చెత్త"],
+        "roads": ["road", "roads", "pothole", "potholes", "tar", "pavement", "footpath", "speed breaker", "gaddha", "sadak", "traffic", "गड्ढा", "सड़क", "குழி", "గుంత"],
+        "green": ["tree", "trees", "park", "parks", "garden", "gardens", "branch", "branches", "greenery", "grass", "plant", "पेड़", "पार्क", "மரங்கள்", "చెట్లు"]
+    }
+
     clf = get_classifier()
     if clf != "fallback" and hasattr(clf, "__call__"):
         try:
-            result = clf(text, candidate_labels, hypothesis_template="This citizen complaint concerns {}.")
+            # Use english_text if present, otherwise original_text
+            eval_text = text if (text and text.strip()) else original_text
+            result = clf(eval_text, candidate_labels, hypothesis_template="This citizen complaint concerns {}.")
         except Exception:
-            result = clf(text, candidate_labels)
+            result = clf(text or original_text, candidate_labels)
         top_label = result["labels"][0]
         top_score = round(result["scores"][0], 2)
         if use_descriptive and top_label in LABEL_TO_DEPT:
             top_label = LABEL_TO_DEPT[top_label]
     else:
-        t_low = text.lower()
-        if any(w in t_low for w in ["water", "pipe", "leak", "tap"]):
+        if any(w in combined_low for w in dept_keywords["water"]):
             top_label, top_score = "water", 0.94
-        elif any(w in t_low for w in ["electric", "power", "light", "bijli"]):
+        elif any(w in combined_low for w in dept_keywords["lighting"]):
             top_label, top_score = "lighting", 0.92
-        elif any(w in t_low for w in ["drain", "sewage", "gutter", "overflow"]):
+        elif any(w in combined_low for w in dept_keywords["drainage"]):
             top_label, top_score = "drainage", 0.95
-        elif any(w in t_low for w in ["garbage", "waste", "trash", "kachra"]):
+        elif any(w in combined_low for w in dept_keywords["sanitation"]):
             top_label, top_score = "sanitation", 0.93
-        elif any(w in t_low for w in ["tree", "park", "branch", "garden"]):
+        elif any(w in combined_low for w in dept_keywords["green"]):
             top_label, top_score = "green", 0.91
-        else:
+        elif any(w in combined_low for w in dept_keywords["roads"]):
             top_label, top_score = "roads", 0.90
+        else:
+            top_label, top_score = "Unclassified", 0.25
 
-    t_low = text.lower()
-    dept_keywords = {
-        "water": ["water", "pipe", "tap", "leakage", "drinking water"],
-        "lighting": ["electric", "electricity", "power", "light", "street light", "bijli"],
-        "drainage": ["drain", "drainage", "sewage", "gutter", "overflow"],
-        "sanitation": ["garbage", "trash", "waste", "kachra", "dustbin"],
-        "roads": ["road", "pothole", "tar", "street damaged", "pavement", "speed breaker"],
-        "green": ["tree", "park", "garden", "branch", "greenery", "tree branch"]
-    }
-    # If the predicted department has direct keyword support in the text, corroborate confidence
-    if top_label in dept_keywords and any(kw in t_low for kw in dept_keywords[top_label]):
-        top_score = max(top_score, 0.75)
+    # Check keyword corroboration
+    matched_depts = [dept for dept, kws in dept_keywords.items() if any(kw in combined_low for kw in kws)]
+
+    # If predicted department has keyword support, boost confidence
+    if top_label in matched_depts:
+        top_score = max(top_score, 0.88)
+    elif matched_depts:
+        # Action-oriented keywords take precedence (e.g., street cleaning -> sanitation, not roads)
+        if "sanitation" in matched_depts and any(sw in combined_low for sw in ["clean", "cleaned", "cleaning", "safai", "garbage", "kachra", "कूड़ा", "सफाई"]):
+            top_label = "sanitation"
+            top_score = max(top_score, 0.90)
+        elif "water" in matched_depts and any(ww in combined_low for ww in ["water", "pipe", "pipeline", "leak", "pani"]):
+            top_label = "water"
+            top_score = max(top_score, 0.90)
+        elif "lighting" in matched_depts and any(lw in combined_low for lw in ["electric", "power", "light", "bijli"]):
+            top_label = "lighting"
+            top_score = max(top_score, 0.90)
+        elif top_score < CONFIDENCE_THRESHOLD:
+            # If BART was uncertain (< 0.4), fallback to the first matched keyword department
+            top_label = matched_depts[0]
+            top_score = 0.85
 
     if top_score < CONFIDENCE_THRESHOLD:
         return {

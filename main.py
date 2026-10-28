@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from preprocess import preprocess                  # Aayush — Steps 1-2
 from postprocess import translate_and_normalize    # Karthik — Steps 3-4
 from classify_route import classify_and_route      # Yshasvee — Steps 5-6
+from groq_client import check_groq_status          # Hybrid Groq AI status
 # ──────────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -127,6 +128,15 @@ def full_pipeline(text: str, debug: bool = False) -> dict:
 def health_check():
     """Readiness check — NestJS should poll this before sending real requests."""
     return {"status": "ready", "models_loaded": True}
+
+@app.get("/groq/status")
+def groq_status(refresh: bool = False):
+    """
+    Check if Groq AI API is working and responsive.
+    Cached by default to prevent continuous pings to the API.
+    Pass ?refresh=true when user clicks manual refresh.
+    """
+    return check_groq_status(force_refresh=refresh)
 
 @app.post("/analyze")
 def analyze(payload: AnalyzeRequest, debug: bool = Query(False)):

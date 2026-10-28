@@ -35,6 +35,7 @@ import {
   SAMPLE_COMPLAINTS,
   DEPARTMENT_METADATA,
   checkBackendHealth,
+  checkGroqStatus,
   analyzeComplaint
 } from "./nlpService";
 
@@ -44,6 +45,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [backendStatus, setBackendStatus] = useState({ online: false, checking: true });
+  const [groqStatus, setGroqStatus] = useState({ checked: false, working: false, checking: true, latency_ms: null, model: "qwen/qwen3.8-27b", error: null });
   const [selectedSampleId, setSelectedSampleId] = useState(SAMPLE_COMPLAINTS[0].id);
   const [showJson, setShowJson] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -57,9 +59,10 @@ export default function App() {
   const [batchResults, setBatchResults] = useState([]);
   const [batchRunning, setBatchRunning] = useState(false);
 
-  // Check backend health on mount
+  // Check backend health and Groq AI status on mount (only once)
   useEffect(() => {
     checkHealth();
+    handleRefreshGroq(false); // Ping once on mount, no repeated polling
     runInitialTriage();
     handleAnalyze(SAMPLE_COMPLAINTS[0].text);
   }, []);
@@ -68,6 +71,19 @@ export default function App() {
     setBackendStatus(prev => ({ ...prev, checking: true }));
     const status = await checkBackendHealth();
     setBackendStatus({ online: status.online, models_loaded: status.models_loaded, checking: false });
+  };
+
+  const handleRefreshGroq = async (force = false) => {
+    setGroqStatus(prev => ({ ...prev, checking: true }));
+    const st = await checkGroqStatus(force);
+    setGroqStatus({
+      checked: true,
+      working: Boolean(st.working),
+      checking: false,
+      latency_ms: st.latency_ms,
+      model: st.model || "qwen/qwen3.8-27b",
+      error: st.error
+    });
   };
 
   const handleSelectSample = (sample) => {
@@ -234,8 +250,9 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Action & Backend Status */}
-          <div className="flex items-center gap-3">
+          {/* Action & Status Badges */}
+          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+            {/* FastAPI Status */}
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-medium">
               <span
                 className={`w-2 h-2 rounded-full ${
@@ -248,9 +265,49 @@ export default function App() {
               <button
                 onClick={checkHealth}
                 title="Refresh backend status"
-                className="text-emerald-600 hover:text-emerald-900 transition-colors ml-1"
+                className="text-emerald-600 hover:text-emerald-900 transition-colors ml-1 cursor-pointer"
               >
                 <RefreshCw className={`w-3 h-3 ${backendStatus.checking ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            {/* Groq AI Status Badge with Manual Ping Button */}
+            <div
+              className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${
+                groqStatus.working
+                  ? "bg-amber-50 border-amber-300 text-amber-950"
+                  : "bg-slate-50 border-slate-200 text-slate-700"
+              }`}
+              title={
+                groqStatus.error
+                  ? `Groq Error: ${groqStatus.error}`
+                  : groqStatus.working
+                  ? `Groq LPU Active (${groqStatus.model}, ${groqStatus.latency_ms}ms)`
+                  : "Groq AI Offline / Not Configured"
+              }
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  groqStatus.checking
+                    ? "bg-amber-400 animate-ping"
+                    : groqStatus.working
+                    ? "bg-amber-500 animate-pulse"
+                    : "bg-slate-400"
+                }`}
+              />
+              <span className="font-semibold flex items-center gap-1">
+                <span>⚡ Groq AI:</span>
+                <span className={groqStatus.working ? "text-amber-800 font-bold" : "text-slate-500 font-semibold"}>
+                  {groqStatus.checking ? "Checking..." : groqStatus.working ? "Connected" : "Offline"}
+                </span>
+              </span>
+              <button
+                onClick={() => handleRefreshGroq(true)}
+                disabled={groqStatus.checking}
+                title="Ping Groq AI API manually to verify status"
+                className="text-amber-700 hover:text-amber-900 transition-colors ml-1 cursor-pointer disabled:opacity-40"
+              >
+                <RefreshCw className={`w-3 h-3 ${groqStatus.checking ? "animate-spin" : ""}`} />
               </button>
             </div>
 
@@ -580,9 +637,16 @@ export default function App() {
                                 className="rounded-xl p-3 border"
                                 style={{ backgroundColor: badge.bg, borderColor: badge.border }}
                               >
-                                <span className="text-[10px] uppercase font-bold block" style={{ color: badge.text }}>
-                                  Urgency Level
-                                </span>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] uppercase font-bold block" style={{ color: badge.text }}>
+                                    Urgency Level
+                                  </span>
+                                  {result.urgency_source === "groq-ai" && (
+                                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold border border-amber-200">
+                                      ⚡ Groq
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-sm font-extrabold text-slate-800 block mt-0.5">
                                   {result.urgency.label}
                                 </span>
@@ -612,6 +676,18 @@ export default function App() {
                             </div>
                           </div>
                         </div>
+
+                        {/* Groq AI Rationale note */}
+                        {result.urgency?.rationale && (
+                          <div className="bg-amber-50/70 rounded-xl p-2.5 border border-amber-200/80 text-xs">
+                            <span className="text-[10px] font-bold text-amber-900 uppercase flex items-center gap-1 mb-0.5">
+                              <span>⚡ Groq AI Assessment</span>
+                            </span>
+                            <p className="italic text-[11px] leading-relaxed text-slate-700">
+                              "{result.urgency.rationale}"
+                            </p>
+                          </div>
+                        )}
 
                         {/* Routing Assignment */}
                         <div className="bg-[#f8faf8] rounded-xl p-3 border border-emerald-900/10 space-y-0.5">

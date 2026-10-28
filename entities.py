@@ -37,15 +37,11 @@ PREVIOUS_COMPLAINT_PHRASES = [
     "ignored",
 ]
 
-def extract_duration_and_location(text: str) -> dict:
+def extract_duration_and_location(text: str, original_text: str = "") -> dict:
     """
     Extract duration (how long the problem has lasted) and location from text.
     Uses spaCy NER for DATE/TIME and GPE/LOC/FAC entities, with a regex
     fallback for duration patterns that spaCy's general English model misses.
-    Note: spaCy's English NER was trained on news/general text, not civic
-    complaints. It catches named places well ("MG Road", "Marikina") but
-    misses vague references like "my area" or "our street" — those aren't
-    named entities. This is a known limitation.
     """
     doc = nlp(text)
     duration = None
@@ -63,17 +59,37 @@ def extract_duration_and_location(text: str) -> dict:
         if match:
             duration = match.group(0)
 
+    # Check original_text if duration still missing
+    if duration is None and original_text:
+        match_orig = re.search(r'(\d+)\s*(days?|दिन|din|naatkal|rojula)', original_text, re.IGNORECASE)
+        if match_orig:
+            duration = f"{match_orig.group(1)} days"
+
+    # Civic location pattern heuristic fallback if spaCy NER missed non-named locations
+    if location is None:
+        comb = f"{text or ''} {original_text or ''}".lower()
+        if any(h in comb for h in ["ghar", "my house", "at home", "in house", "our house"]):
+            location = "Residence / House"
+        elif "market" in comb or "gate" in comb:
+            location = "Market Area"
+        elif "colony" in comb:
+            location = "Residential Colony"
+        elif "park" in comb:
+            location = "Public Park"
+        elif "clinic" in comb or "hospital" in comb:
+            location = "Health Clinic"
+
     return {"duration": duration, "location": location}
 
-def detect_previous_complaint(text: str) -> bool:
+def detect_previous_complaint(text: str, original_text: str = "") -> bool:
     """
     Check if the complaint text indicates the citizen has raised this
     issue before (follow-up / repeated complaint).
     """
-    text_lower = text.lower()
-    return any(phrase in text_lower for phrase in PREVIOUS_COMPLAINT_PHRASES)
+    combined = f"{text or ''} {original_text or ''}".lower()
+    return any(phrase in combined for phrase in PREVIOUS_COMPLAINT_PHRASES)
 
-def extract_entities(text: str) -> dict:
+def extract_entities(text: str, original_text: str = "") -> dict:
     """
     Combined entity extraction: duration, location, and previous-complaint flag.
     Returns:
@@ -83,9 +99,9 @@ def extract_entities(text: str) -> dict:
             "previous_complaint": True | False
         }
     """
-    if not text or not text.strip():
+    if not text and not original_text:
         return {"duration": None, "location": None, "previous_complaint": False}
 
-    result = extract_duration_and_location(text)
-    result["previous_complaint"] = detect_previous_complaint(text)
+    result = extract_duration_and_location(text, original_text=original_text)
+    result["previous_complaint"] = detect_previous_complaint(text, original_text=original_text)
     return result

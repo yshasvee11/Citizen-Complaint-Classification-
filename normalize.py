@@ -104,10 +104,10 @@ def fix_elongated_words(text: str) -> str:
     fixed_words = []
 
     for word in words:
-        # Check if the word contains 3 or more repeated consecutive characters
-        if re.search(r'(.)\1{2,}', word):
-            cand_single = re.sub(r'(.)\1{2,}', r'\1', word)
-            cand_double = re.sub(r'(.)\1{2,}', r'\1\1', word)
+        # Check if the word contains 3 or more repeated consecutive alphabet characters
+        if re.search(r'([a-zA-Z])\1{2,}', word):
+            cand_single = re.sub(r'([a-zA-Z])\1{2,}', r'\1', word)
+            cand_double = re.sub(r'([a-zA-Z])\1{2,}', r'\1\1', word)
 
             in_single = cand_single.lower() in nlp.vocab.strings
             in_double = cand_double.lower() in nlp.vocab.strings
